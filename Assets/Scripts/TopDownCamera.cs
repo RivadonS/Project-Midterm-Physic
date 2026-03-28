@@ -3,7 +3,7 @@ using UnityEngine;
 public class TopDownCamera : MonoBehaviour
 {
     public Transform target;
-    public Vector3 offset = new Vector3(0, 10, -5);
+    public Vector3 offset = new Vector3(0, 18f, -10f);
     public float smoothSpeed = 5f;
 
     void LateUpdate()

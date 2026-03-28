@@ -1,15 +1,15 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.SceneManagement;
 
 [RequireComponent(typeof(Rigidbody))]
-[RequireComponent(typeof(LineRenderer))]
-
 public class PlayerController : MonoBehaviour
 {
     [Header("Stats")]
-    public int maxHp = 100;
-    public int currentHp;
+    public int maxHP = 100;
+    public int currentHP;
     public int keyCount = 0;
+    public int attackDamage = 20;
 
     [Header("Movement")]
     public float baseSpeed = 5f;
@@ -17,46 +17,56 @@ public class PlayerController : MonoBehaviour
 
     [Header("Aiming (Raycast)")]
     public LayerMask groundLayer;
-    private LineRenderer aimLine;
+    public float weaponRange = 50f;
     private Rigidbody rb;
     private Camera mainCam;
+    private GameObject currentTarget;
 
     [Header("Inputs")]
     public InputAction moveAction;
     public InputAction aimAction;
+    public InputAction shootAction;
+
+    [Header("Level Exit")]
+    public string nextLevelName = "Level 2";
+    public int requiredKeysToExit = 1;
 
     void Awake()
     {
+        Time.timeScale = 1f;
+
         rb = GetComponent<Rigidbody>();
-        aimLine = GetComponent<LineRenderer>();
         mainCam = Camera.main;
 
-        currentHp = maxHp;
+        currentHP = maxHP;
         currentSpeed = baseSpeed;
-
-        aimLine.positionCount = 2;
-        aimLine.startWidth = 0.05f;
-        aimLine.endWidth = 0.05f;
     }
 
     void OnEnable()
     {
         moveAction.Enable();
         aimAction.Enable();
+        shootAction.Enable();
     }
 
     void OnDisable()
     {
         moveAction.Disable();
         aimAction.Disable();
+        shootAction.Disable();
     }
 
     void Update()
     {
         HandleAiming();
+
+        if (shootAction.triggered)
+        {
+            Shoot();
+        }
     }
 
-    private void FixedUpdate()
+    void FixedUpdate()
     {
         HandleMovement();
     }
@@ -64,30 +74,77 @@ public class PlayerController : MonoBehaviour
     private void HandleMovement()
     {
         Vector2 inputDir = moveAction.ReadValue<Vector2>();
-
         Vector3 moveDir = new Vector3(inputDir.x, 0, inputDir.y).normalized;
         rb.MovePosition(rb.position + moveDir * currentSpeed * Time.fixedDeltaTime);
     }
 
     private void HandleAiming()
     {
-        Vector2 mousePos = aimAction.ReadValue<Vector2>();
-        Ray ray = mainCam.ScreenPointToRay(mousePos);
-        if (Physics.Raycast(ray, out RaycastHit hit, 100f, groundLayer))
+        Vector2 mousePosition = aimAction.ReadValue<Vector2>();
+        Ray ray = mainCam.ScreenPointToRay(mousePosition);
+
+        if (Physics.Raycast(ray, out RaycastHit groundHit, 100f, groundLayer))
         {
-            Vector3 targetPoint = hit.point;
+            Vector3 targetPoint = groundHit.point;
             targetPoint.y = transform.position.y;
-
             transform.LookAt(targetPoint);
+        }
+        if (Physics.Raycast(transform.position, transform.forward, out RaycastHit hit, weaponRange))
+        {
+            if (hit.collider.CompareTag("Enemy"))
+            {
+                currentTarget = hit.collider.gameObject;
+                Debug.DrawRay(transform.position, transform.forward * hit.distance, Color.red);
+            }
+            else
+            {
+                currentTarget = null;
+                Debug.DrawRay(transform.position, transform.forward * hit.distance, Color.darkGreen);
+            }
+        }
+        else
+        {
+            currentTarget = null;
+            Debug.DrawRay(transform.position, transform.forward * weaponRange, Color.white);
+        }
+    }
 
-            aimLine.SetPosition(0, transform.position);
-            aimLine.SetPosition(1, targetPoint);
+    private void Shoot()
+    {
+        if (currentTarget != null)
+        {
+            Enemy enemyScript = currentTarget.GetComponent<Enemy>();
+            if (enemyScript != null)
+            {
+                enemyScript.TakeDamage(attackDamage);
+                Debug.Log($"Hit {currentTarget.name} Damage: {attackDamage}");
+            }
+        }
+        else
+        {
+            Debug.Log("Not Hit");
         }
     }
 
     public void TakeDamage(int damage)
     {
-        currentHp -= damage;
-        if (currentHp <= 0) Debug.Log("Game Over!");
+        currentHP -= damage;
+        if (currentHP <= 0) Debug.Log("Player Game Over!");
+    }
+
+    private void OnTriggerEnter(Collider other)
+    {
+        if (other.CompareTag("ExitDoor"))
+        {
+            if (keyCount >= requiredKeysToExit)
+            {
+                Debug.Log("Loading to next level....");
+                SceneManager.LoadScene(nextLevelName);
+            }
+            else
+            {
+                Debug.Log($"Have {keyCount}/{requiredKeysToExit} keys");
+            }
+        }
     }
 }
